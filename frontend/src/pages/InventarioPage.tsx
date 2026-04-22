@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { apiGet, apiPost } from "../lib/api";
+import { apiDelete, apiGet, apiPost, apiPut } from "../lib/api";
 
 type ItemRow = {
   id_item: number;
@@ -12,6 +12,8 @@ type ItemRow = {
 
 type ListItensResponse = { ok: true; data: ItemRow[] };
 type CreateItemResponse = { ok: true; data: ItemRow };
+type UpdateItemResponse = { ok: true; data: ItemRow };
+type DeleteItemResponse = { ok: true; data: { id_item: number } };
 
 export function InventarioPage({ token }: { token: string }) {
   const [itens, setItens] = useState<ItemRow[]>([]);
@@ -33,9 +35,16 @@ export function InventarioPage({ token }: { token: string }) {
   // formulário de cadastro
   const [nome, setNome] = useState("");
   const [tipo, setTipo] = useState("");
+  const [quantidade, setQuantidade] = useState("0");
   const [validade, setValidade] = useState("");
   const [estoqueMinimo, setEstoqueMinimo] = useState("0");
   const [busy, setBusy] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editNome, setEditNome] = useState("");
+  const [editTipo, setEditTipo] = useState("");
+  const [editQuantidade, setEditQuantidade] = useState("0");
+  const [editValidade, setEditValidade] = useState("");
+  const [editEstoqueMinimo, setEditEstoqueMinimo] = useState("0");
 
   async function load() {
     setErr("");
@@ -82,6 +91,7 @@ export function InventarioPage({ token }: { token: string }) {
       await apiPost<CreateItemResponse>("/itens", token, {
         nome: nomeValue,
         tipo: tipoValue,
+        quantidade: Number(quantidade) || 0,
         validade: validade || null,
         estoque_minimo: estoqueMinimoNum,
       });
@@ -94,6 +104,85 @@ export function InventarioPage({ token }: { token: string }) {
       setTipo("");
       setValidade("");
       setEstoqueMinimo("0");
+      setQuantidade("0");
+    } catch (e: any) {
+      setErr(String(e?.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function iniciarEdicao(it: ItemRow) {
+    setErr("");
+    setEditingId(it.id_item);
+    setEditNome(it.nome ?? "");
+    setEditTipo(it.tipo ?? "");
+    setEditValidade(it.validade ? String(it.validade).slice(0, 10) : "");
+    setEditEstoqueMinimo(String(it.estoque_minimo ?? 0));
+    setEditQuantidade(String(it.quantidade ?? 0));
+  }
+
+  function cancelarEdicao() {
+    setEditingId(null);
+    setEditNome("");
+    setEditTipo("");
+    setEditValidade("");
+    setEditEstoqueMinimo("0");
+    setEditQuantidade("0");
+  }
+
+  async function salvarEdicao() {
+    if (!editingId) return;
+    setErr("");
+
+    const nomeValue = editNome.trim();
+    const tipoValue = editTipo.trim();
+    const estoqueMinimoNum = Number(editEstoqueMinimo);
+    const quantidadeNum = Number(editQuantidade);
+
+    if (!nomeValue) {
+      setErr("Informe o nome do item");
+      return;
+    }
+
+    if (!tipoValue) {
+      setErr("Informe o tipo do item");
+      return;
+    }
+
+    if (!Number.isFinite(estoqueMinimoNum) || estoqueMinimoNum < 0) {
+      setErr("Informe um estoque mínimo válido");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await apiPut<UpdateItemResponse>(`/itens/${editingId}`, token, {
+        nome: nomeValue,
+        tipo: tipoValue,
+        validade: editValidade || null,
+        estoque_minimo: estoqueMinimoNum,
+        quantidade: quantidadeNum,  
+      });
+
+      await load();
+      cancelarEdicao();
+    } catch (e: any) {
+      setErr(String(e?.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function excluirItem(idItem: number, nomeItem: string | null) {
+    const label = nomeItem?.trim() ? `${nomeItem} (#${idItem})` : `#${idItem}`;
+    if (!window.confirm(`Deseja excluir o item ${label}?`)) return;
+    setErr("");
+    setBusy(true);
+    try {
+      await apiDelete<DeleteItemResponse>(`/itens/${idItem}`, token);
+      await load();
+      if (editingId === idItem) cancelarEdicao();
     } catch (e: any) {
       setErr(String(e?.message ?? e));
     } finally {
@@ -118,6 +207,11 @@ export function InventarioPage({ token }: { token: string }) {
           placeholder="tipo"
           value={tipo}
           onChange={(e) => setTipo(e.target.value)}
+        />
+        <input
+          placeholder="quantidade"
+          value={quantidade}
+          onChange={(e) => setQuantidade(e.target.value)}
         />
         <input
           placeholder="validade (YYYY-MM-DD)"
@@ -161,27 +255,95 @@ export function InventarioPage({ token }: { token: string }) {
               <th>Qtd</th>
               <th>Validade</th>
               <th>Est. mín</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((it) => (
               <tr key={it.id_item}>
                 <td>{it.id_item}</td>
-                <td>{it.nome ?? "-"}</td>
-                <td>{it.tipo ?? "-"}</td>
-                <td>{it.quantidade ?? "-"}</td>
-                <td>{it.validade ? String(it.validade).slice(0, 10) : "-"}</td>
-                <td>{it.estoque_minimo ?? "-"}</td>
+                <td>
+                  {editingId === it.id_item ? (
+                    <input
+                      value={editNome}
+                      onChange={(e) => setEditNome(e.target.value)}
+                      disabled={busy}
+                    />
+                  ) : (
+                    it.nome ?? "-"
+                  )}
+                </td>
+                <td>
+                  {editingId === it.id_item ? (
+                    <input
+                      value={editTipo}
+                      onChange={(e) => setEditTipo(e.target.value)}
+                      disabled={busy}
+                    />
+                  ) : (
+                    it.tipo ?? "-"
+                  )}
+                </td>
+                <td>
+                  {editingId === it.id_item ? (
+                    <input
+                      value={editQuantidade}
+                      onChange={(e) => setEditQuantidade(e.target.value)}
+                      placeholder="quantidade"
+                      style={{ width: 140 }}
+                      disabled={busy}
+                    />
+                  ) : it.quantidade ? (
+                    String(it.quantidade).slice(0, 10)
+                  ) : (
+                    "-"
+                  )}
+                </td>
+                <td>
+                  {editingId === it.id_item ? (
+                    <input
+                      value={editValidade}
+                      onChange={(e) => setEditValidade(e.target.value)}
+                      placeholder="YYYY-MM-DD"
+                      style={{ width: 140 }}
+                      disabled={busy}
+                    />
+                  ) : it.validade ? (
+                    String(it.validade).slice(0, 10)
+                  ) : (
+                    "-"
+                  )}
+                </td>
+                <td>
+                  {editingId === it.id_item ? (
+                    <input
+                      value={editEstoqueMinimo}
+                      onChange={(e) => setEditEstoqueMinimo(e.target.value)}
+                      style={{ width: 80 }}
+                      disabled={busy}
+                    />
+                  ) : (
+                    it.estoque_minimo ?? "-"
+                  )}
+                </td>
+                <td>
+                  {editingId === it.id_item ? (
+                    <>
+                      <button onClick={salvarEdicao} disabled={busy}>Salvar</button>
+                      <button onClick={cancelarEdicao} disabled={busy}>Cancelar</button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => iniciarEdicao(it)} disabled={busy}>Editar</button>
+                      <button onClick={() => excluirItem(it.id_item, it.nome)} disabled={busy}>Excluir</button>
+                    </>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
-
-      <p style={{ marginTop: 12 }}>
-        Observação: esta tela usa <code>GET /itens</code> para listar e <code>POST /itens</code>
-        para cadastrar item com os campos obrigatórios <code>nome</code> e <code>tipo</code>.
-      </p>
     </div>
   );
 }

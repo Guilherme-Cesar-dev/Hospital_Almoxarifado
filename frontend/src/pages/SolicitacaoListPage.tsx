@@ -1,21 +1,50 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { apiGet } from "../lib/api";
+import { apiDelete, apiGet } from "../lib/api";
 import type { SolicitacaoListResponse } from "../types/solicitacoes";
+
+type DeleteSolicitacaoResponse = { ok: true; data: { id_solicitacao: number } };
 
 export function SolicitacoesListPage({ token }: { token: string }) {
   const [params, setParams] = useSearchParams();
   const [data, setData] = useState<SolicitacaoListResponse | null>(null);
   const [err, setErr] = useState("");
+  const [busyDeleteId, setBusyDeleteId] = useState<number | null>(null);
 
   const estado = params.get("estado") ?? "";
 
-  useEffect(() => {
+  async function load() {
     const id = estado ? `?estado=${encodeURIComponent(estado)}` : "";
-    apiGet<SolicitacaoListResponse>(`/solicitacoes${id}`, token)
-      .then(setData)
+    const resp = await apiGet<SolicitacaoListResponse>(`/solicitacoes${id}`, token);
+    setData(resp);
+  }
+
+  useEffect(() => {
+    setErr("");
+    load()
       .catch((e) => setErr(String(e.message ?? e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, estado]);
+
+  async function excluirSolicitacao(idSolicitacao: number, titulo: string, estadoSolicitacao: string) {
+    if (estadoSolicitacao !== "pendente") {
+      setErr("Só é possível excluir solicitação pendente");
+      return;
+    }
+
+    if (!window.confirm(`Deseja excluir a solicitação #${idSolicitacao} (${titulo})?`)) return;
+
+    setErr("");
+    setBusyDeleteId(idSolicitacao);
+    try {
+      await apiDelete<DeleteSolicitacaoResponse>(`/solicitacoes/${idSolicitacao}`, token);
+      await load();
+    } catch (e: any) {
+      setErr(String(e?.message ?? e));
+    } finally {
+      setBusyDeleteId(null);
+    }
+  }
 
   return (
     <div>
@@ -50,6 +79,7 @@ export function SolicitacoesListPage({ token }: { token: string }) {
               <th>Setor</th>
               <th>Estado</th>
               <th>Quando</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -62,6 +92,14 @@ export function SolicitacoesListPage({ token }: { token: string }) {
                 <td>{s.setor}</td>
                 <td>{s.estado}</td>
                 <td>{new Date(s.quando).toLocaleString()}</td>
+                <td>
+                  <button
+                    onClick={() => excluirSolicitacao(s.id_solicitacao, s.titulo, s.estado)}
+                    disabled={busyDeleteId !== null || s.estado !== "pendente"}
+                  >
+                    {busyDeleteId === s.id_solicitacao ? "Excluindo..." : "Excluir"}
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

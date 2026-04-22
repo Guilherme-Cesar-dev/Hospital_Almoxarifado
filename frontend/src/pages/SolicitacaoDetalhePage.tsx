@@ -1,12 +1,14 @@
 // name=src/pages/SolicitacaoDetalhePage.tsx
 import { useEffect, useMemo, useState } from "react";
-import { apiGet, apiPost } from "../lib/api";
+import { useNavigate } from "react-router-dom";
+import { apiDelete, apiGet, apiPost } from "../lib/api";
 import type { SolicitacaoDetalheResponse } from "../types/solicitacoes";
 
 export function SolicitacaoDetalhePage({ token, id }: { token: string; id: number }) {
+  const nav = useNavigate();
   const [data, setData] = useState<SolicitacaoDetalheResponse | null>(null);
   const [err, setErr] = useState("");
-  const [busy, setBusy] = useState<null | "cancelar" | "atender">(null);
+  const [busy, setBusy] = useState<null | "cancelar" | "atender" | "excluir">(null);
 
   async function load() {
     setErr("");
@@ -23,6 +25,7 @@ export function SolicitacaoDetalhePage({ token, id }: { token: string; id: numbe
 
   const podeCancelar = useMemo(() => estado === "pendente", [estado]);
   const podeAtender = useMemo(() => estado === "pendente", [estado]);
+  const podeExcluir = useMemo(() => estado === "pendente", [estado]);
 
   async function onCancelar() {
     setBusy("cancelar");
@@ -44,6 +47,20 @@ export function SolicitacaoDetalhePage({ token, id }: { token: string; id: numbe
     } catch (e: any) {
       setErr(String(e?.message ?? e));
     } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onExcluir() {
+    if (!data) return;
+    if (!window.confirm(`Deseja excluir a solicitação #${id} (${data.data.solicitacao.titulo})?`)) return;
+
+    setBusy("excluir");
+    try {
+      await apiDelete(`/solicitacoes/${id}`, token);
+      nav("/", { replace: true });
+    } catch (e: any) {
+      setErr(String(e?.message ?? e));
       setBusy(null);
     }
   }
@@ -72,6 +89,10 @@ export function SolicitacaoDetalhePage({ token, id }: { token: string; id: numbe
 
         <button onClick={onAtender} disabled={!podeAtender || busy !== null}>
           {busy === "atender" ? "Atendendo..." : "Atender"}
+        </button>
+
+        <button onClick={onExcluir} disabled={!podeExcluir || busy !== null}>
+          {busy === "excluir" ? "Excluindo..." : "Excluir"}
         </button>
 
         <button onClick={() => load().catch((e) => setErr(String(e.message ?? e)))} disabled={busy !== null}>

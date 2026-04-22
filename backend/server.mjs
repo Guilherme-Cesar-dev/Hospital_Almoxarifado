@@ -17,6 +17,7 @@ app.use((req, _res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
 });
+
 app.get("/health", (req, res) =>
   res.json({
     ok: true,
@@ -32,32 +33,7 @@ app.get("/itens", requireAuth, async (req, res) => {
   const { data, error } = await supa
     .from("ITEM")
     .select("id_item,nome,tipo,quantidade,validade,estoque_minimo")
-    .order("nome", { ascending: true });
-
-  if (error) return res.status(400).json({ error: error.message });
-  return res.json({ ok: true, data });
-});
-
-app.post("/itens", requireAuth, async (req, res) => {
-  const { nome, tipo, validade, estoque_minimo } = req.body;
-
-  if (!nome || !tipo) {
-    return res.status(400).json({ error: "Campos obrigatórios: nome, tipo" });
-  }
-
-  const supa = supabaseForUser(req.accessToken);
-
-  const { data, error } = await supa
-    .from("ITEM")
-    .insert({
-      nome,
-      tipo,
-      validade: validade || null,
-      estoque_minimo: Number.isFinite(Number(estoque_minimo)) ? Number(estoque_minimo) : 0,
-      quantidade: 0,
-    })
-    .select("id_item,nome,tipo,quantidade,validade,estoque_minimo")
-    .single();
+    .order("id_item", { ascending: true });
 
   if (error) return res.status(400).json({ error: error.message });
   return res.json({ ok: true, data });
@@ -151,6 +127,101 @@ app.get("/solicitacoes/:id/itens", requireAuth, async (req, res) => {
   return res.json({ ok: true, data });
 });
 
+app.post("/itens", requireAuth, async (req, res) => {
+  const { nome, tipo, validade, estoque_minimo } = req.body;
+
+  if (!nome || !tipo) {
+    return res.status(400).json({ error: "Campos obrigatórios: nome, tipo" });
+  }
+
+  const supa = supabaseForUser(req.accessToken);
+
+  const { data, error } = await supa
+    .from("ITEM")
+    .insert({
+      nome,
+      tipo,
+      validade: validade || null,
+      estoque_minimo: Number.isFinite(Number(estoque_minimo)) ? Number(estoque_minimo) : 0,
+      quantidade: 0,
+    })
+    .select("id_item,nome,tipo,quantidade,validade,estoque_minimo")
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+  return res.json({ ok: true, data });
+});
+
+app.put("/itens/:id", requireAuth, async (req, res) => {
+  const id_item = Number(req.params.id);
+  const { nome, tipo, quantidade, validade, estoque_minimo } = req.body;
+
+  if (!Number.isFinite(id_item) || id_item <= 0) {
+    return res.status(400).json({ error: "id_item inválido" });
+  }
+
+  if (!nome || !tipo) {
+    return res.status(400).json({ error: "Campos obrigatórios: nome, tipo" });
+  }
+
+  const supa = supabaseForUser(req.accessToken);
+
+  const { data, error } = await supa
+    .from("ITEM")
+    .update({
+      nome,
+      tipo,
+      quantidade: Number.isFinite(Number(quantidade)) ? Number(quantidade) : 0,
+      validade: validade || null,
+      estoque_minimo: Number.isFinite(Number(estoque_minimo)) ? Number(estoque_minimo) : 0,
+    })
+    .eq("id_item", id_item)
+    .select("id_item,nome,tipo,quantidade,validade,estoque_minimo")
+    .maybeSingle();
+
+  if (error) return res.status(400).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "Item não encontrado ou sem permissão" });
+  return res.json({ ok: true, data });
+});
+
+app.delete("/itens/:id", requireAuth, async (req, res) => {
+  const id_item = Number(req.params.id);
+
+  if (!Number.isFinite(id_item) || id_item <= 0) {
+    return res.status(400).json({ error: "id_item inválido" });
+  }
+
+  const supa = supabaseForUser(req.accessToken);
+
+  const { count, error: depError } = await supa
+    .from("SOLICITACAO_ITEM")
+    .select("id_item", { count: "exact", head: true })
+    .eq("id_item", id_item);
+
+  if (depError) return res.status(400).json({ error: depError.message });
+  if ((count ?? 0) > 0) {
+    return res.status(409).json({
+      error: "Não é possível excluir: item já vinculado a solicitações. Edite os dados do item em vez de excluir.",
+    });
+  }
+
+  const { data, error } = await supa
+    .from("ITEM")
+    .delete()
+    .eq("id_item", id_item)
+    .select("id_item")
+    .maybeSingle();
+
+  if (error?.code === "23503") {
+    return res.status(409).json({
+      error: "Não é possível excluir: item já vinculado a solicitações. Edite os dados do item em vez de excluir.",
+    });
+  }
+  if (error) return res.status(400).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "Item não encontrado ou sem permissão" });
+  return res.json({ ok: true, data });
+});
+
 app.post("/solicitacoes", requireAuth, async (req, res) => {
   const { titulo, setor, descricao } = req.body;
 
@@ -175,6 +246,49 @@ app.post("/solicitacoes", requireAuth, async (req, res) => {
   if (error) {
     const details = [error.message, error.details, error.hint].filter(Boolean).join(" | ");
     return res.status(400).json({ error: details || "Falha ao criar solicitação" });
+  }
+
+  return res.json({ ok: true, data });
+});
+
+app.delete("/solicitacoes/:id", requireAuth, async (req, res) => {
+  const id_solicitacao = Number(req.params.id);
+  if (!Number.isFinite(id_solicitacao) || id_solicitacao <= 0) {
+    return res.status(400).json({ error: "id_solicitacao inválido" });
+  }
+
+  const supa = supabaseForUser(req.accessToken);
+
+  const { data: sol, error: eSol } = await supa
+    .from("SOLICITACAO")
+    .select("id_solicitacao, estado")
+    .eq("id_solicitacao", id_solicitacao)
+    .maybeSingle();
+
+  if (eSol) return res.status(400).json({ error: eSol.message });
+  if (!sol) return res.status(404).json({ error: "Solicitação não encontrada ou sem permissão" });
+  if (sol.estado !== "pendente") {
+    return res.status(409).json({ error: "Só é possível excluir solicitação pendente" });
+  }
+
+  const { error: eItens } = await supa
+    .from("SOLICITACAO_ITEM")
+    .delete()
+    .eq("id_solicitacao", id_solicitacao);
+
+  if (eItens) return res.status(400).json({ error: eItens.message });
+
+  const { data, error } = await supa
+    .from("SOLICITACAO")
+    .delete()
+    .eq("id_solicitacao", id_solicitacao)
+    .eq("estado", "pendente")
+    .select("id_solicitacao")
+    .maybeSingle();
+
+  if (error) return res.status(400).json({ error: error.message });
+  if (!data) {
+    return res.status(404).json({ error: "Solicitação não encontrada, sem permissão, ou não está pendente" });
   }
 
   return res.json({ ok: true, data });
