@@ -36,7 +36,32 @@ app.get("/itens", requireAuth, async (req, res) => {
     .order("id_item", { ascending: true });
 
   if (error) return res.status(400).json({ error: error.message });
-  return res.json({ ok: true, data });
+
+  const ids = (data ?? []).map((it) => it.id_item).filter((v) => v != null);
+  if (ids.length === 0) return res.json({ ok: true, data: data ?? [] });
+
+  // Saldo operacional vem de ITEM_ESTOQUE (alimentado pela RPC de movimentação).
+  const { data: saldoRows, error: saldoError } = await supa
+    .from("ITEM_ESTOQUE")
+    .select("id_item,saldo_atual")
+    .in("id_item", ids);
+
+  if (saldoError) {
+    // Fallback para a coluna ITEM.quantidade caso o usuário não possa ler ITEM_ESTOQUE.
+    return res.json({ ok: true, data: data ?? [] });
+  }
+
+  const saldoMap = new Map((saldoRows ?? []).map((r) => [String(r.id_item), Number(r.saldo_atual)]));
+
+  const normalized = (data ?? []).map((it) => {
+    const saldoAtual = saldoMap.get(String(it.id_item));
+    return {
+      ...it,
+      quantidade: Number.isFinite(saldoAtual) ? saldoAtual : it.quantidade,
+    };
+  });
+
+  return res.json({ ok: true, data: normalized });
 });
 
 app.get("/solicitacoes/:id", requireAuth, async (req, res) => {

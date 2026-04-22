@@ -14,6 +14,7 @@ type ListItensResponse = { ok: true; data: ItemRow[] };
 type CreateItemResponse = { ok: true; data: ItemRow };
 type UpdateItemResponse = { ok: true; data: ItemRow };
 type DeleteItemResponse = { ok: true; data: { id_item: number } };
+type MovimentacaoResponse = { ok: true; data: unknown };
 
 export function InventarioPage({ token }: { token: string }) {
   const [itens, setItens] = useState<ItemRow[]>([]);
@@ -32,6 +33,15 @@ export function InventarioPage({ token }: { token: string }) {
     });
   }, [itens, q]);
 
+  const itensAbaixoMinimo = useMemo(() => {
+    return itens.filter((it) => {
+      const qtd = Number(it.quantidade ?? 0);
+      const min = Number(it.estoque_minimo ?? 0);
+      if (!Number.isFinite(qtd) || !Number.isFinite(min)) return false;
+      return qtd < min;
+    });
+  }, [itens]);
+
   // formulário de cadastro
   const [nome, setNome] = useState("");
   const [tipo, setTipo] = useState("");
@@ -45,6 +55,11 @@ export function InventarioPage({ token }: { token: string }) {
   const [editQuantidade, setEditQuantidade] = useState("0");
   const [editValidade, setEditValidade] = useState("");
   const [editEstoqueMinimo, setEditEstoqueMinimo] = useState("0");
+
+  // formulário de movimentação
+  const [movItemId, setMovItemId] = useState("");
+  const [movTipo, setMovTipo] = useState<"entrada" | "saida">("entrada");
+  const [movQuantidade, setMovQuantidade] = useState("1");
 
   async function load() {
     setErr("");
@@ -190,11 +205,58 @@ export function InventarioPage({ token }: { token: string }) {
     }
   }
 
+  async function registrarMovimentacao() {
+    setErr("");
+
+    const idItemNum = Number(movItemId);
+    const quantidadeNum = Number(movQuantidade);
+
+    if (!Number.isFinite(idItemNum) || idItemNum <= 0) {
+      setErr("Selecione um item válido para movimentação");
+      return;
+    }
+
+    if (!Number.isFinite(quantidadeNum) || quantidadeNum <= 0) {
+      setErr("Informe uma quantidade válida (maior que zero)");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await apiPost<MovimentacaoResponse>("/movimentacoes", token, {
+        id_item: idItemNum,
+        tipo: movTipo,
+        quantidade: quantidadeNum,
+      });
+
+      await load();
+      setMovQuantidade("1");
+    } catch (e: any) {
+      setErr(String(e?.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div>
       <h2>Inventário</h2>
 
       {err && <p style={{ color: "crimson" }}>{err}</p>}
+
+      {itensAbaixoMinimo.length > 0 && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: 10,
+            border: "1px solid #f4c542",
+            background: "#fff7db",
+            color: "#6b4f00",
+          }}
+        >
+          Alerta: {itensAbaixoMinimo.length} item(ns) abaixo do estoque mínimo.
+        </div>
+      )}
 
       <h3>Cadastrar novo item</h3>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -233,6 +295,38 @@ export function InventarioPage({ token }: { token: string }) {
         </button>
       </div>
 
+      <h3 style={{ marginTop: 16 }}>Movimentar estoque</h3>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <select
+          value={movItemId}
+          onChange={(e) => setMovItemId(e.target.value)}
+          style={{ minWidth: 260 }}
+        >
+          <option value="">Selecione o item</option>
+          {itens.map((it) => (
+            <option key={it.id_item} value={String(it.id_item)}>
+              #{it.id_item} - {it.nome ?? "Sem nome"}
+            </option>
+          ))}
+        </select>
+
+        <select value={movTipo} onChange={(e) => setMovTipo(e.target.value as "entrada" | "saida") }>
+          <option value="entrada">Entrada</option>
+          <option value="saida">Saída</option>
+        </select>
+
+        <input
+          placeholder="quantidade"
+          value={movQuantidade}
+          onChange={(e) => setMovQuantidade(e.target.value)}
+          style={{ width: 140 }}
+        />
+
+        <button onClick={registrarMovimentacao} disabled={busy}>
+          {busy ? "Processando..." : "Registrar movimentação"}
+        </button>
+      </div>
+
       <h3 style={{ marginTop: 16 }}>Itens</h3>
       <div style={{ marginBottom: 8 }}>
         <input
@@ -260,7 +354,14 @@ export function InventarioPage({ token }: { token: string }) {
           </thead>
           <tbody>
             {filtered.map((it) => (
-              <tr key={it.id_item}>
+              <tr
+                key={it.id_item}
+                style={
+                  Number(it.quantidade ?? 0) < Number(it.estoque_minimo ?? 0)
+                    ? { background: "#fff1f1" }
+                    : undefined
+                }
+              >
                 <td>{it.id_item}</td>
                 <td>
                   {editingId === it.id_item ? (
@@ -293,8 +394,8 @@ export function InventarioPage({ token }: { token: string }) {
                       style={{ width: 140 }}
                       disabled={busy}
                     />
-                  ) : it.quantidade ? (
-                    String(it.quantidade).slice(0, 10)
+                  ) : it.quantidade != null ? (
+                    it.quantidade
                   ) : (
                     "-"
                   )}
