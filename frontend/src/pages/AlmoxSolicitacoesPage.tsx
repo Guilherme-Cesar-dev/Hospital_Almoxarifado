@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiDelete, apiGet } from "../lib/api";
+import { apiDelete, apiGet, apiPost } from "../lib/api";
 import type { SolicitacaoListResponse } from "../types/solicitacoes";
 
 type Estado = "pendente" | "atendida" | "cancelada" | "todas";
@@ -39,6 +39,21 @@ export function AlmoxSolicitacoesPage({ token }: { token: string }) {
     load().catch((e) => setErr(String(e?.message ?? e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, query]);
+
+  async function atenderSolicitacao(idSolicitacao: number, estadoSolicitacao: string) {
+    if (estadoSolicitacao !== "pendente") {
+      setErr("Só é possível atender solicitação pendente");
+      return;
+    }
+
+    setErr("");
+    try {
+      await apiPost(`/solicitacoes/${idSolicitacao}/atender`, token, {});
+      await load();
+    } catch (e: any) {
+      setErr(String(e?.message ?? e));
+    }
+  }
 
   async function excluirSolicitacao(idSolicitacao: number, titulo: string, estadoSolicitacao: string) {
     if (estadoSolicitacao !== "pendente") {
@@ -106,6 +121,13 @@ export function AlmoxSolicitacoesPage({ token }: { token: string }) {
                 <td>{new Date(s.quando).toLocaleString()}</td>
                 <td>
                   <button onClick={() => nav(`/solicitacoes/${s.id_solicitacao}`)}>Abrir</button>
+                  <button
+                    onClick={() => atenderSolicitacao(s.id_solicitacao, s.estado)}
+                    disabled={loading || busyDeleteId !== null || s.estado !== "pendente"}
+                    style={{ marginLeft: 8 }}
+                  >
+                    Atender
+                  </button>
                   <button
                     onClick={() => excluirSolicitacao(s.id_solicitacao, s.titulo, s.estado)}
                     disabled={loading || busyDeleteId !== null || s.estado !== "pendente"}

@@ -23,7 +23,7 @@ export function NovaSolicitacaoPage({ token }: { token: string }) {
 
   const [titulo, setTitulo] = useState("");
   const [descricao, setDescricao] = useState("");
-  const [setor, setSetor] = useState("Enfermaria");
+  const [setor, setSetor] = useState("");
   const [err, setErr] = useState("");
 
   const [createdId, setCreatedId] = useState<number | null>(null);
@@ -80,67 +80,86 @@ export function NovaSolicitacaoPage({ token }: { token: string }) {
   return (
     <div>
       <h2>Nova Solicitação</h2>
-      {err && <p style={{ color: "crimson" }}>{err}</p>}
+      {err && <div className="error">{err}</div>}
 
       {!createdId ? (
-        <>
-          <div>
-            <label>Título</label>
-            <input value={titulo} onChange={(e) => setTitulo(e.target.value)} />
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Dados da Solicitação</h3>
           </div>
-          <div>
-            <label>Descrição</label>
-            <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} />
-          </div>
-          <div>
-            <label>Setor</label>
-            <input value={setor} onChange={(e) => setSetor(e.target.value)} />
-          </div>
-
-          <button onClick={() => criar().catch((e) => setErr(String(e.message ?? e)))}>
-            Criar
-          </button>
-        </>
-      ) : (
-        <>
-          <p>Criada: #{createdId}</p>
-
-          <h3>Adicionar item</h3>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <select
-              value={idItem}
-              onChange={(e) => setIdItem(e.target.value)}
-              disabled={itensLoading}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label>Título</label>
+              <input value={titulo} maxLength={15} onChange={(e) => setTitulo(e.target.value.slice(0, 15))} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label>Setor / Cpf</label>
+              <input value={setor} maxLength={30} onChange={(e) => setSetor(e.target.value.slice(0, 30))} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, gridColumn: "1 / -1" }}>
+              <label>Descrição</label>
+              <textarea value={descricao} maxLength={300} onChange={(e) => setDescricao(e.target.value.slice(0, 300))} rows={4} />
+            </div>
+            <button
+              onClick={() => criar().catch((e) => setErr(String(e.message ?? e)))}
+              style={{ gridColumn: "1 / -1" }}
             >
-              <option value="">
-                {itensLoading ? "Carregando itens..." : "Selecione um item"}
-              </option>
-              {itens.map((it) => (
-                <option key={it.id_item} value={String(it.id_item)}>
-                  {(it.nome ?? `ITEM #${it.id_item}`) + ` (#{it.id_item})`}
-                </option>
-              ))}
-            </select>
-
-            <input
-              placeholder="quantidade"
-              value={qtd}
-              onChange={(e) => setQtd(e.target.value)}
-              style={{ width: 120 }}
-            />
-            <input
-              placeholder="observação"
-              value={obs}
-              onChange={(e) => setObs(e.target.value)}
-              style={{ flex: 1 }}
-            />
-            <button onClick={() => addItem().catch((e) => setErr(String(e.message ?? e)))}>
-              Adicionar
+              Criar
             </button>
           </div>
+        </div>
+      ) : (
+        <>
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div className="success">Solicitação criada com sucesso: #{createdId}</div>
+          </div>
 
-          <div style={{ marginTop: 12 }}>
-            <button onClick={() => nav(`/solicitacoes/${createdId}`)}>Ver detalhe</button>
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Adicionar Item</h3>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+              <select
+                value={idItem}
+                onChange={(e) => setIdItem(e.target.value)}
+                disabled={itensLoading}
+                style={{ gridColumn: "1 / -1" }}
+              >
+                <option value="">
+                  {itensLoading ? "Carregando itens..." : "Selecione um item"}
+                </option>
+                {itens.map((it) => (
+                  <option key={it.id_item} value={String(it.id_item)}>
+                    {(it.nome ?? `ITEM #${it.id_item}`) + ` (#{it.id_item})`}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                placeholder="quantidade"
+                value={qtd}
+                inputMode="numeric"
+                maxLength={2}
+                onChange={(e) => setQtd(e.target.value.replace(/\D/g, "").slice(0, 2))}
+              />
+              <input
+                placeholder="observação"
+                value={obs}
+                maxLength={70}
+                onChange={(e) => setObs(e.target.value.slice(0, 70))}
+                style={{ gridColumn: "1 / -1" }}
+              />
+              <button
+                onClick={() => addItem().catch((e) => setErr(String(e.message ?? e)))}
+                style={{ gridColumn: "1 / -1" }}
+              >
+                Adicionar
+              </button>
+
+              <button onClick={() => nav(`/solicitacoes/${createdId}`)} style={{ gridColumn: "1 / -1" }}>
+                Ver detalhe
+              </button>
+            </div>
           </div>
         </>
       )}

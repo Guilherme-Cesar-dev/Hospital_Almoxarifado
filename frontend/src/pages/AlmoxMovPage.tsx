@@ -11,9 +11,9 @@ type ItemRow = {
 };
 
 type ListItensResponse = { ok: true; data: ItemRow[] };
-type CreateItemResponse = { ok: true; data: ItemRow };
 type UpdateItemResponse = { ok: true; data: ItemRow };
 type DeleteItemResponse = { ok: true; data: { id_item: number } };
+type MovimentacaoResponse = { ok: true; data: unknown };
 
 function formatDateInput(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
@@ -26,48 +26,22 @@ function isDateIso(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-export function InventarioPage({ token }: { token: string }) {
+export function AlmoxMovPage({ token }: { token: string }) {
   const [itens, setItens] = useState<ItemRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  // filtros simples
   const [q, setQ] = useState("");
-  const [statusFiltro, setStatusFiltro] = useState<"todos" | "baixa" | "normal">("todos");
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
+    if (!qq) return itens;
     return itens.filter((it) => {
       const nome = (it.nome ?? "").toLowerCase();
       const tipo = (it.tipo ?? "").toLowerCase();
-      const textoOk = !qq || nome.includes(qq) || tipo.includes(qq) || String(it.id_item).includes(qq);
-
-      const qtd = Number(it.quantidade ?? 0);
-      const min = Number(it.estoque_minimo ?? 0);
-      const emBaixa = Number.isFinite(qtd) && Number.isFinite(min) && qtd < min;
-      const statusOk =
-        statusFiltro === "todos" ||
-        (statusFiltro === "baixa" && emBaixa) ||
-        (statusFiltro === "normal" && !emBaixa);
-
-      return textoOk && statusOk;
+      return nome.includes(qq) || tipo.includes(qq) || String(it.id_item).includes(qq);
     });
-  }, [itens, q, statusFiltro]);
+  }, [itens, q]);
 
-  const itensAbaixoMinimo = useMemo(() => {
-    return itens.filter((it) => {
-      const qtd = Number(it.quantidade ?? 0);
-      const min = Number(it.estoque_minimo ?? 0);
-      if (!Number.isFinite(qtd) || !Number.isFinite(min)) return false;
-      return qtd < min;
-    });
-  }, [itens]);
-
-  // formulário de cadastro
-  const [nome, setNome] = useState("");
-  const [tipo, setTipo] = useState("");
-  const [quantidade, setQuantidade] = useState("0");
-  const [validade, setValidade] = useState("");
-  const [estoqueMinimo, setEstoqueMinimo] = useState("0");
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editNome, setEditNome] = useState("");
@@ -75,6 +49,10 @@ export function InventarioPage({ token }: { token: string }) {
   const [editQuantidade, setEditQuantidade] = useState("0");
   const [editValidade, setEditValidade] = useState("");
   const [editEstoqueMinimo, setEditEstoqueMinimo] = useState("0");
+
+  const [movItemId, setMovItemId] = useState("");
+  const [movTipo, setMovTipo] = useState<"entrada" | "saida">("entrada");
+  const [movQuantidade, setMovQuantidade] = useState("1");
 
   async function load() {
     setErr("");
@@ -93,59 +71,6 @@ export function InventarioPage({ token }: { token: string }) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
-
-  async function cadastrarItem() {
-    setErr("");
-
-    const nomeValue = nome.trim();
-    const tipoValue = tipo.trim();
-    const estoqueMinimoNum = Number(estoqueMinimo);
-
-    if (!nomeValue) {
-      setErr("Informe o nome do item");
-      return;
-    }
-
-    if (!tipoValue) {
-      setErr("Informe o tipo do item");
-      return;
-    }
-
-    if (!Number.isFinite(estoqueMinimoNum) || estoqueMinimoNum < 0) {
-      setErr("Informe um estoque mínimo válido");
-      return;
-    }
-
-    if (validade && !isDateIso(validade)) {
-      setErr("Data de validade inválida. Use o formato YYYY-MM-DD");
-      return;
-    }
-
-    setBusy(true);
-    try {
-      await apiPost<CreateItemResponse>("/itens", token, {
-        nome: nomeValue,
-        tipo: tipoValue,
-        quantidade: Number(quantidade) || 0,
-        validade: validade || null,
-        estoque_minimo: estoqueMinimoNum,
-      });
-
-      // recarrega lista
-      await load();
-
-      // limpa form
-      setNome("");
-      setTipo("");
-      setValidade("");
-      setEstoqueMinimo("0");
-      setQuantidade("0");
-    } catch (e: any) {
-      setErr(String(e?.message ?? e));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   function iniciarEdicao(it: ItemRow) {
     setErr("");
@@ -186,12 +111,12 @@ export function InventarioPage({ token }: { token: string }) {
     }
 
     if (!Number.isFinite(estoqueMinimoNum) || estoqueMinimoNum < 0) {
-      setErr("Informe um estoque mínimo válido");
+      setErr("Informe um estoque minimo valido");
       return;
     }
 
     if (editValidade && !isDateIso(editValidade)) {
-      setErr("Data de validade inválida. Use o formato YYYY-MM-DD");
+      setErr("Data de validade invalida. Use o formato YYYY-MM-DD");
       return;
     }
 
@@ -202,7 +127,7 @@ export function InventarioPage({ token }: { token: string }) {
         tipo: tipoValue,
         validade: editValidade || null,
         estoque_minimo: estoqueMinimoNum,
-        quantidade: quantidadeNum,  
+        quantidade: quantidadeNum,
       });
 
       await load();
@@ -230,81 +155,102 @@ export function InventarioPage({ token }: { token: string }) {
     }
   }
 
+  async function registrarMovimentacao() {
+    setErr("");
+
+    const idItemNum = Number(movItemId);
+    const quantidadeNum = Number(movQuantidade);
+
+    if (!Number.isFinite(idItemNum) || idItemNum <= 0) {
+      setErr("Selecione um item valido para movimentacao");
+      return;
+    }
+
+    if (!Number.isFinite(quantidadeNum) || quantidadeNum <= 0) {
+      setErr("Informe uma quantidade valida (maior que zero)");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await apiPost<MovimentacaoResponse>("/movimentacoes", token, {
+        id_item: idItemNum,
+        tipo: movTipo,
+        quantidade: quantidadeNum,
+      });
+
+      await load();
+      setMovQuantidade("1");
+      setMovItemId("");
+    } catch (e: any) {
+      setErr(String(e?.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div>
-      <h2>Inventário</h2>
+      <h2>Movimentacao de Estoque</h2>
 
       {err && <div className="error">{err}</div>}
 
-      {itensAbaixoMinimo.length > 0 && (
-        <div className="alert alert-warning">
-          ⚠️ {itensAbaixoMinimo.length} item(ns) abaixo do estoque mínimo.
-        </div>
-      )}
-
       <div className="card">
         <div className="card-header">
-          <h3 className="card-title">Cadastrar Novo Item</h3>
+          <h3 className="card-title">Movimentar Estoque</h3>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, alignItems: "end" }}>
-          <input
-            placeholder="nome"
-            value={nome}
-            maxLength={30}
-            onChange={(e) => setNome(e.target.value.slice(0, 30))}
-          />
-          <input
-            placeholder="tipo"
-            value={tipo}
-            maxLength={20}
-            onChange={(e) => setTipo(e.target.value.slice(0, 20))}
-          />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+          <select
+            value={movItemId}
+            onChange={(e) => setMovItemId(e.target.value)}
+            disabled={busy}
+            style={{ gridColumn: "1 / -1" }}
+          >
+            <option value="">Selecione o item</option>
+            {itens.map((it) => (
+              <option key={it.id_item} value={String(it.id_item)}>
+                #{it.id_item} - {it.nome ?? "Sem nome"}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={movTipo}
+            onChange={(e) => setMovTipo(e.target.value as "entrada" | "saida")}
+            disabled={busy}
+          >
+            <option value="entrada">Entrada</option>
+            <option value="saida">Saida</option>
+          </select>
+
           <input
             placeholder="quantidade"
-            value={quantidade}
-            inputMode="numeric"
-            maxLength={3}
-            onChange={(e) => setQuantidade(e.target.value.replace(/\D/g, "").slice(0, 3))}
+            type="number"
+            value={movQuantidade}
+            maxLength={2}
+            onChange={(e) => setMovQuantidade(e.target.value.replace(/\D/g, "").slice(0, 2))}
+            disabled={busy}
           />
-          <input
-            placeholder="validade (YYYY-MM-DD)"
-            value={validade}
-            inputMode="numeric"
-            maxLength={10}
-            onChange={(e) => setValidade(formatDateInput(e.target.value))}
-          />
-          <input
-            placeholder="estoque mínimo"
-            value={estoqueMinimo}
-            inputMode="numeric"
-            maxLength={3}
-            onChange={(e) => setEstoqueMinimo(e.target.value.replace(/\D/g, "").slice(0, 3))}
-          />
-          <button onClick={cadastrarItem} disabled={busy}>
-            {busy ? "Salvando..." : "Cadastrar Item"}
+
+          <button onClick={registrarMovimentacao} disabled={busy} style={{ gridColumn: "1 / -1" }}>
+            {busy ? "Processando..." : "Registrar Movimentacao"}
           </button>
         </div>
       </div>
 
       <h3 style={{ marginTop: 16, marginBottom: 8 }}>Buscar Itens</h3>
       <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8, alignItems: "end" }}>
-          <input
-            placeholder="buscar por id/nome/tipo"
-            value={q}
-            maxLength={30}
-            onChange={(e) => setQ(e.target.value.slice(0, 30))}
-          />
-          <select value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value as "todos" | "baixa" | "normal")}>
-            <option value="todos">Todos os status</option>
-            <option value="baixa">Em baixa</option>
-            <option value="normal">Normal</option>
-          </select>
-        </div>
+        <input
+          placeholder="buscar por id/nome/tipo"
+          value={q}
+          maxLength={30}
+          onChange={(e) => setQ(e.target.value.slice(0, 30))}
+          style={{ width: "100%" }}
+        />
       </div>
 
       {loading ? (
-        <div className="loading">Carregando…</div>
+        <div className="loading">Carregando...</div>
       ) : (
         <table>
           <thead>
@@ -314,20 +260,13 @@ export function InventarioPage({ token }: { token: string }) {
               <th>Tipo</th>
               <th>Qtd</th>
               <th>Validade</th>
-              <th>Est. mín</th>
-              <th>Ações</th>
+              <th>Est. min</th>
+              <th>Acoes</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((it) => (
-              <tr
-                key={it.id_item}
-                style={
-                  Number(it.quantidade ?? 0) < Number(it.estoque_minimo ?? 0)
-                    ? { background: "#ffcece" }
-                    : undefined
-                }
-              >
+              <tr key={it.id_item}>
                 <td>{it.id_item}</td>
                 <td>
                   {editingId === it.id_item ? (

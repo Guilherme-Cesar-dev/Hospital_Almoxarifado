@@ -426,6 +426,43 @@ app.post("/movimentacoes", requireAuth, async (req, res) => {
   return res.json({ ok: true, data });
 });
 
+app.get("/movimentacoes", requireAuth, async (req, res) => {
+  const supa = supabaseForUser(req.accessToken);
+
+  // Lê histórico de movimentações da tabela MOVIMENTACAO com join em ITEM
+  const { data, error } = await supa
+    .from("MOVIMENTACAO")
+    .select(
+      `
+      id_movimentacao,
+      id_item,
+      tipo,
+      quantidade,
+      quando,
+      quem,
+      ITEM:id_item(nome)
+      `
+    )
+    .order("quando", { ascending: false });
+
+  if (error) {
+    console.error("Erro ao ler MOVIMENTACAO:", error.message);
+    return res.status(400).json({ error: error.message });
+  }
+
+  // Normaliza resposta para formato esperado pelo frontend
+  const normalized = (data ?? []).map((mov) => ({
+    id_movimentacao: mov.id_movimentacao,
+    id_item: mov.id_item,
+    nome_item: mov.ITEM?.nome || null,
+    tipo: mov.tipo,
+    quantidade: mov.quantidade,
+    criado_em: mov.quando, // 'quando' é o timestamp
+  }));
+
+  return res.json({ ok: true, data: normalized });
+});
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const PORT = process.env.PORT || 3000;
