@@ -1,3 +1,12 @@
+/**
+ * ARQUIVO: App.tsx
+ * DESCRIÇÃO: Componente raiz da aplicação
+ * FUNCIONALIDADES:
+ *   - Autenticação e autorização baseada em JWT
+ *   - Roteamento dinâmico por roles (solicitante, almox_m, almox_c, adm)
+ *   - Navegação principal com identificação do usuário
+ *   - Layout responsivo da aplicação
+ */
 import { useEffect, useState } from "react";
 import { Routes, Route, Navigate, Link, Outlet } from "react-router-dom";
 import { useAuthToken } from "./hooks/useAuthToken";

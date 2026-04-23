@@ -1,3 +1,17 @@
+/**
+ * ARQUIVO: solicitacoes.ts
+ * DESCRIÇÃO: Tipos TypeScript para operações com solicitações de itens
+ * 
+ * TIPOS PRINCIPAIS:
+ *   - Solicitacao: Estrutura de uma solicitação
+ *   - SolicitacaoDetalhe: Detalhes com itens e metadata
+ *   - CreateSolicitacaoBody/Response: Criar nova solicitação
+ *   - AddItemBody/Response: Adicionar item a solicitação
+ *   - AtenderResponse: Resposta ao atender solicitação
+ * 
+ * FLUXO: Solicitante cria solicitação → Almox verifica e atende → Sistema cria movimentações
+ */
+
 export type Solicitacao = {
   id_solicitacao: number;
   titulo: string;

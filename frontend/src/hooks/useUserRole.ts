@@ -1,3 +1,16 @@
+/**
+ * HOOK: useUserRole
+ * DESCRIÇÃO: Carrega e normaliza o role (permissão) do usuário do banco de dados
+ * 
+ * FUNCIONALIDADES:
+ *   - Busca usuário autenticado do Supabase
+ *   - Consulta tabela USUARIO para obter role
+ *   - Normaliza valores de role (admin→adm, almox_mov→almox_m, etc)
+ *   - Valida e garante tipos corretos
+ * 
+ * ROLES SUPORTADOS: 'solicitante' | 'adm' | 'almox_m' | 'almox_c'
+ * RETORNO: { role: AppRole | null, loading: boolean }
+ */
 // name=src/hooks/useUserRole.ts
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";

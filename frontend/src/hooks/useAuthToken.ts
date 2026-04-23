@@ -1,3 +1,15 @@
+/**
+ * HOOK: useAuthToken
+ * DESCRIÇÃO: Gerencia token JWT de autenticação do usuário
+ * 
+ * FUNCIONALIDADES:
+ *   - Recupera sessão existente ao montar
+ *   - Monitora mudanças de autenticação (login/logout)
+ *   - Recarrega página ao fazer login (para atualizar permissões)
+ *   - Retorna token e userId
+ * 
+ * RETORNO: { token: string | null, userId: string | null }
+ */
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 

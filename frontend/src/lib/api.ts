@@ -1,3 +1,19 @@
+/**
+ * ARQUIVO: api.ts
+ * DESCRIÇÃO: Wrapper de funções HTTP para comunicação com backend
+ * FUNCIONALIDADES:
+ *   - Abstrai chamadas fetch com autenticação JWT
+ *   - Trata erros e respostas JSON automaticamente
+ *   - Suporta GET, POST, PUT e DELETE
+ *   - Baseado na URL do servidor (VITE_API_BASE)
+ * 
+ * FUNÇÕES:
+ *   - apiGet<T>(path, token): Requisição GET com tipo genérico
+ *   - apiPost<T>(path, token, body?): Requisição POST com corpo JSON
+ *   - apiPut<T>(path, token, body?): Requisição PUT com corpo JSON
+ *   - apiDelete<T>(path, token): Requisição DELETE
+ */
+
 const API_BASE = (import.meta.env.VITE_API_BASE as string) ?? "http://localhost:3000";
 
 type ApiError = { error?: string };
