@@ -85,6 +85,12 @@ app.get("/solicitacoes/:id", requireAuth, async (req, res) => {
 
   const first = rows[0];
 
+  const { data: concluiuUsuario } = await supa
+    .from("USUARIO")
+    .select("*")
+    .eq("user_id", first.concluida_por)
+    .maybeSingle();
+
   const solicitacao = {
     id_solicitacao: first.id_solicitacao,
     titulo: first.titulo,
@@ -94,6 +100,7 @@ app.get("/solicitacoes/:id", requireAuth, async (req, res) => {
     solicitante_user_id: first.solicitante_user_id,
     quando: first.quando,
     concluida_por: first.concluida_por,
+    concluida_por_nome: typeof concluiuUsuario?.nome === "string" ? concluiuUsuario.nome : null,
     concluida_em: first.concluida_em,
     atendimento_resumo: first.atendimento_resumo,
   };
@@ -189,17 +196,22 @@ app.put("/itens/:id", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Campos obrigatórios: nome, tipo" });
   }
 
+  const payload = {
+    nome,
+    tipo,
+    validade: validade || null,
+    estoque_minimo: Number.isFinite(Number(estoque_minimo)) ? Number(estoque_minimo) : 0,
+  };
+
+  if (quantidade !== undefined && quantidade !== null && Number.isFinite(Number(quantidade))) {
+    payload.quantidade = Number(quantidade);
+  }
+
   const supa = supabaseForUser(req.accessToken);
 
   const { data, error } = await supa
     .from("ITEM")
-    .update({
-      nome,
-      tipo,
-      quantidade: Number.isFinite(Number(quantidade)) ? Number(quantidade) : 0,
-      validade: validade || null,
-      estoque_minimo: Number.isFinite(Number(estoque_minimo)) ? Number(estoque_minimo) : 0,
-    })
+    .update(payload)
     .eq("id_item", id_item)
     .select("id_item,nome,tipo,quantidade,validade,estoque_minimo")
     .maybeSingle();
@@ -301,7 +313,14 @@ app.delete("/solicitacoes/:id", requireAuth, async (req, res) => {
     .delete()
     .eq("id_solicitacao", id_solicitacao);
 
-  if (eItens) return res.status(400).json({ error: eItens.message });
+  // Se não conseguir deletar os itens, retorna erro antes de tentar deletar a solicitação
+  // Isso evita a violação de FK
+  if (eItens) {
+    return res.status(403).json({
+      error:
+        "Não foi possível excluir a solicitação porque você não tem permissão para remover os itens vinculados. Apenas o solicitante original pode excluir.",
+    });
+  }
 
   const { data, error } = await supa
     .from("SOLICITACAO")
@@ -403,6 +422,67 @@ app.post("/solicitacoes/:id/itens", requireAuth, async (req, res) => {
   return res.json({ ok: true, data });
 });
 
+// Atualiza quantidade_aprovada de um item da solicitação (usado por almox_mov)
+app.put("/solicitacoes/:id/itens/:itemId", requireAuth, async (req, res) => {
+  const id_solicitacao = Number(req.params.id);
+  const id_solicitacao_item = Number(req.params.itemId);
+  const { quantidade_aprovada } = req.body;
+
+  if (!Number.isFinite(id_solicitacao) || id_solicitacao <= 0) {
+    return res.status(400).json({ error: "id_solicitacao inválido" });
+  }
+  if (!Number.isFinite(id_solicitacao_item) || id_solicitacao_item <= 0) {
+    return res.status(400).json({ error: "id_solicitacao_item inválido" });
+  }
+
+  if (!Number.isFinite(Number(quantidade_aprovada)) || Number(quantidade_aprovada) < 0) {
+    return res.status(400).json({ error: "quantidade_aprovada inválida" });
+  }
+
+  const supa = supabaseForUser(req.accessToken);
+
+  // Verifica solicitação existe e está pendente
+  const { data: sol, error: eSol } = await supa
+    .from("SOLICITACAO")
+    .select("id_solicitacao, estado")
+    .eq("id_solicitacao", id_solicitacao)
+    .maybeSingle();
+
+  if (eSol) return res.status(400).json({ error: eSol.message });
+  if (!sol) return res.status(404).json({ error: "Solicitação não encontrada ou sem permissão" });
+  if (sol.estado !== "pendente") {
+    return res.status(409).json({ error: "Só é possível aprovar itens quando a solicitação estiver pendente" });
+  }
+
+  // Verifica role do usuário: somente almox_mov ou admin podem aprovar
+  const { data: u, error: eU } = await supa
+    .from("USUARIO")
+    .select("role, user_id")
+    .eq("user_id", req.user.id)
+    .maybeSingle();
+
+  if (eU) return res.status(400).json({ error: eU.message });
+  if (!u) return res.status(403).json({ error: "Usuário não encontrado" });
+
+  const role = (u.role || "").toString().trim().toLowerCase();
+  if (!["almox_mov", "admin"].includes(role)) {
+    return res.status(403).json({ error: "Sem permissão para aprovar itens" });
+  }
+
+  const { data, error } = await supa
+    .from("SOLICITACAO_ITEM")
+    .update({ quantidade_aprovada: Number(quantidade_aprovada) })
+    .eq("id_solicitacao_item", id_solicitacao_item)
+    .eq("id_solicitacao", id_solicitacao)
+    .select("*")
+    .maybeSingle();
+
+  if (error) return res.status(400).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "Item da solicitação não encontrado" });
+
+  return res.json({ ok: true, data });
+});
+
 app.post("/movimentacoes", requireAuth, async (req, res) => {
   const { id_item, tipo, quantidade } = req.body;
 
@@ -429,8 +509,7 @@ app.post("/movimentacoes", requireAuth, async (req, res) => {
 app.get("/movimentacoes", requireAuth, async (req, res) => {
   const supa = supabaseForUser(req.accessToken);
 
-  // Lê histórico de movimentações da tabela MOVIMENTACAO com join em ITEM
-  const { data, error } = await supa
+  const { data: movimentos, error } = await supa
     .from("MOVIMENTACAO")
     .select(
       `
@@ -450,14 +529,61 @@ app.get("/movimentacoes", requireAuth, async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 
+  const saidas = (movimentos ?? []).filter((mov) => mov.tipo === "saida");
+
+  const solicitacaoPorMovimentacao = new Map();
+
+  function coletarIdsMovimentacao(input, acc) {
+    if (input == null) return;
+
+    if (Array.isArray(input)) {
+      for (const item of input) coletarIdsMovimentacao(item, acc);
+      return;
+    }
+
+    if (typeof input !== "object") return;
+
+    const obj = input;
+    if (obj.o_id_movimentacao != null && Number.isFinite(Number(obj.o_id_movimentacao))) {
+      acc.add(Number(obj.o_id_movimentacao));
+    }
+
+    for (const value of Object.values(obj)) {
+      coletarIdsMovimentacao(value, acc);
+    }
+  }
+
+  if (saidas.length > 0) {
+    const { data: solicitacoesRows, error: solicitacoesError } = await supa
+      .from("SOLICITACAO")
+      .select("id_solicitacao,atendimento_resumo")
+      .not("atendimento_resumo", "is", null);
+
+    if (solicitacoesError) {
+      return res.status(400).json({ error: solicitacoesError.message });
+    }
+
+    for (const sol of solicitacoesRows ?? []) {
+      const ids = new Set();
+      coletarIdsMovimentacao(sol.atendimento_resumo, ids);
+      for (const idMov of ids) {
+        solicitacaoPorMovimentacao.set(idMov, sol.id_solicitacao);
+      }
+    }
+  }
+
   // Normaliza resposta para formato esperado pelo frontend
-  const normalized = (data ?? []).map((mov) => ({
+  const normalized = (movimentos ?? []).map((mov) => ({
     id_movimentacao: mov.id_movimentacao,
     id_item: mov.id_item,
     nome_item: mov.ITEM?.nome || null,
     tipo: mov.tipo,
     quantidade: mov.quantidade,
     criado_em: mov.quando, // 'quando' é o timestamp
+    id_solicitacao:
+      mov.tipo === "saida" && Number.isFinite(Number(mov.id_movimentacao))
+        ? (solicitacaoPorMovimentacao.get(Number(mov.id_movimentacao)) ?? null)
+        : null,
   }));
 
   return res.json({ ok: true, data: normalized });

@@ -44,9 +44,9 @@ function Layout({ role, userName }: { role: AppRole; userName: string }) {
 
         {canAlmoxM && <Link to="/almox/solicitacoes">Solicitações (almox)</Link>}
         {canAlmoxM && <Link to="/almox/movimentacao">Movimentação de estoque</Link>}
+        {canAlmoxM && <Link to="/historico">Histórico de Movimentações</Link>}
 
         {canAlmoxC && <Link to="/inventario">Inventário</Link>}
-        {canAlmoxC && <Link to="/historico">Histórico de Movimentações</Link>}
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
           <span
@@ -117,7 +117,7 @@ export default function App() {
     );
   }
 
-  if (loading) return <div>Carregando…</div>;
+  if (loading) return <div className="loading-screen">Carregando informações do usuário...</div>;
   if (!role) return <div>Role ausente ou inválida na tabela USUARIO</div>;
 
   const canSolicitante = role === "solicitante" || role === "adm";
@@ -157,12 +157,13 @@ export default function App() {
           </>
         )}
 
-        {canAlmoxC && (
+        {(canAlmoxC || canAlmoxM) && (
           <>
-            <Route path="/inventario" element={<InventarioPage token={token} />} />
-            <Route path="/historico" element={<HistoricoMovimentacoesPage token={token} />} />
+            {canAlmoxC && <Route path="/inventario" element={<InventarioPage token={token} />} />}
           </>
         )}
+
+        {canAlmoxM && <Route path="/historico" element={<HistoricoMovimentacoesPage token={token} />} />}
 
         <Route path="*" element={<Navigate to={defaultPath} replace />} />
       </Route>

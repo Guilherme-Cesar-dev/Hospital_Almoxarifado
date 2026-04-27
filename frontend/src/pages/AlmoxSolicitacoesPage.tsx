@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiDelete, apiGet, apiPost } from "../lib/api";
+import { apiGet, apiPost } from "../lib/api";
 import type { SolicitacaoListResponse } from "../types/solicitacoes";
 
 type Estado = "pendente" | "atendida" | "cancelada" | "todas";
-type DeleteSolicitacaoResponse = { ok: true; data: { id_solicitacao: number } };
 
 export function AlmoxSolicitacoesPage({ token }: { token: string }) {
   const nav = useNavigate();
@@ -13,7 +12,6 @@ export function AlmoxSolicitacoesPage({ token }: { token: string }) {
   const [data, setData] = useState<SolicitacaoListResponse | null>(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
-  const [busyDeleteId, setBusyDeleteId] = useState<number | null>(null);
 
   const query = useMemo(() => {
     const q = new URLSearchParams();
@@ -55,26 +53,6 @@ export function AlmoxSolicitacoesPage({ token }: { token: string }) {
     }
   }
 
-  async function excluirSolicitacao(idSolicitacao: number, titulo: string, estadoSolicitacao: string) {
-    if (estadoSolicitacao !== "pendente") {
-      setErr("Só é possível excluir solicitação pendente");
-      return;
-    }
-
-    if (!window.confirm(`Deseja excluir a solicitação #${idSolicitacao} (${titulo})?`)) return;
-
-    setErr("");
-    setBusyDeleteId(idSolicitacao);
-    try {
-      await apiDelete<DeleteSolicitacaoResponse>(`/solicitacoes/${idSolicitacao}`, token);
-      await load();
-    } catch (e: any) {
-      setErr(String(e?.message ?? e));
-    } finally {
-      setBusyDeleteId(null);
-    }
-  }
-
   return (
     <div>
       <h2>Solicitações (almox)</h2>
@@ -105,7 +83,7 @@ export function AlmoxSolicitacoesPage({ token }: { token: string }) {
             <tr>
               <th>ID</th>
               <th>Título</th>
-              <th>Setor</th>
+              <th>Setor / Cpf</th>
               <th>Estado</th>
               <th>Quando</th>
               <th></th>
@@ -123,17 +101,10 @@ export function AlmoxSolicitacoesPage({ token }: { token: string }) {
                   <button onClick={() => nav(`/solicitacoes/${s.id_solicitacao}`)}>Abrir</button>
                   <button
                     onClick={() => atenderSolicitacao(s.id_solicitacao, s.estado)}
-                    disabled={loading || busyDeleteId !== null || s.estado !== "pendente"}
+                    disabled={loading || s.estado !== "pendente"}
                     style={{ marginLeft: 8 }}
                   >
                     Atender
-                  </button>
-                  <button
-                    onClick={() => excluirSolicitacao(s.id_solicitacao, s.titulo, s.estado)}
-                    disabled={loading || busyDeleteId !== null || s.estado !== "pendente"}
-                    style={{ marginLeft: 8 }}
-                  >
-                    {busyDeleteId === s.id_solicitacao ? "Excluindo..." : "Excluir"}
                   </button>
                 </td>
               </tr>

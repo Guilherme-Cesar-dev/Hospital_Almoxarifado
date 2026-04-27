@@ -51,7 +51,7 @@ export function AlmoxMovPage({ token }: { token: string }) {
   const [editEstoqueMinimo, setEditEstoqueMinimo] = useState("0");
 
   const [movItemId, setMovItemId] = useState("");
-  const [movTipo, setMovTipo] = useState<"entrada" | "saida">("entrada");
+  const [movTipo] = useState<"saida">("saida");
   const [movQuantidade, setMovQuantidade] = useState("1");
 
   async function load() {
@@ -191,13 +191,13 @@ export function AlmoxMovPage({ token }: { token: string }) {
 
   return (
     <div>
-      <h2>Movimentacao de Estoque</h2>
+      <h2>Saída de Estoque</h2>
 
       {err && <div className="error">{err}</div>}
 
       <div className="card">
         <div className="card-header">
-          <h3 className="card-title">Movimentar Estoque</h3>
+          <h3 className="card-title">Registrar Saída</h3>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
           <select
@@ -214,15 +214,6 @@ export function AlmoxMovPage({ token }: { token: string }) {
             ))}
           </select>
 
-          <select
-            value={movTipo}
-            onChange={(e) => setMovTipo(e.target.value as "entrada" | "saida")}
-            disabled={busy}
-          >
-            <option value="entrada">Entrada</option>
-            <option value="saida">Saida</option>
-          </select>
-
           <input
             placeholder="quantidade"
             type="number"
@@ -233,7 +224,7 @@ export function AlmoxMovPage({ token }: { token: string }) {
           />
 
           <button onClick={registrarMovimentacao} disabled={busy} style={{ gridColumn: "1 / -1" }}>
-            {busy ? "Processando..." : "Registrar Movimentacao"}
+            {busy ? "Processando..." : "Registrar Saída"}
           </button>
         </div>
       </div>
@@ -261,7 +252,6 @@ export function AlmoxMovPage({ token }: { token: string }) {
               <th>Qtd</th>
               <th>Validade</th>
               <th>Est. min</th>
-              <th>Acoes</th>
             </tr>
           </thead>
           <tbody>
@@ -338,19 +328,6 @@ export function AlmoxMovPage({ token }: { token: string }) {
                     />
                   ) : (
                     it.estoque_minimo ?? "-"
-                  )}
-                </td>
-                <td>
-                  {editingId === it.id_item ? (
-                    <>
-                      <button onClick={salvarEdicao} disabled={busy}>Salvar</button>
-                      <button onClick={cancelarEdicao} disabled={busy}>Cancelar</button>
-                    </>
-                  ) : (
-                    <>
-                      <button onClick={() => iniciarEdicao(it)} disabled={busy}>Editar</button>
-                      <button onClick={() => excluirItem(it.id_item, it.nome)} disabled={busy}>Excluir</button>
-                    </>
                   )}
                 </td>
               </tr>

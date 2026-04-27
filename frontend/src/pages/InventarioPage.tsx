@@ -14,6 +14,7 @@ type ListItensResponse = { ok: true; data: ItemRow[] };
 type CreateItemResponse = { ok: true; data: ItemRow };
 type UpdateItemResponse = { ok: true; data: ItemRow };
 type DeleteItemResponse = { ok: true; data: { id_item: number } };
+type MovimentacaoResponse = { ok: true; data: unknown };
 
 function formatDateInput(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
@@ -72,9 +73,12 @@ export function InventarioPage({ token }: { token: string }) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editNome, setEditNome] = useState("");
   const [editTipo, setEditTipo] = useState("");
-  const [editQuantidade, setEditQuantidade] = useState("0");
   const [editValidade, setEditValidade] = useState("");
   const [editEstoqueMinimo, setEditEstoqueMinimo] = useState("0");
+
+  // Entrada de estoque
+  const [movItemId, setMovItemId] = useState("");
+  const [movQuantidade, setMovQuantidade] = useState("1");
 
   async function load() {
     setErr("");
@@ -154,7 +158,6 @@ export function InventarioPage({ token }: { token: string }) {
     setEditTipo(it.tipo ?? "");
     setEditValidade(it.validade ? String(it.validade).slice(0, 10) : "");
     setEditEstoqueMinimo(String(it.estoque_minimo ?? 0));
-    setEditQuantidade(String(it.quantidade ?? 0));
   }
 
   function cancelarEdicao() {
@@ -163,7 +166,6 @@ export function InventarioPage({ token }: { token: string }) {
     setEditTipo("");
     setEditValidade("");
     setEditEstoqueMinimo("0");
-    setEditQuantidade("0");
   }
 
   async function salvarEdicao() {
@@ -173,7 +175,6 @@ export function InventarioPage({ token }: { token: string }) {
     const nomeValue = editNome.trim();
     const tipoValue = editTipo.trim();
     const estoqueMinimoNum = Number(editEstoqueMinimo);
-    const quantidadeNum = Number(editQuantidade);
 
     if (!nomeValue) {
       setErr("Informe o nome do item");
@@ -202,7 +203,6 @@ export function InventarioPage({ token }: { token: string }) {
         tipo: tipoValue,
         validade: editValidade || null,
         estoque_minimo: estoqueMinimoNum,
-        quantidade: quantidadeNum,  
       });
 
       await load();
@@ -223,6 +223,39 @@ export function InventarioPage({ token }: { token: string }) {
       await apiDelete<DeleteItemResponse>(`/itens/${idItem}`, token);
       await load();
       if (editingId === idItem) cancelarEdicao();
+    } catch (e: any) {
+      setErr(String(e?.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function fazerEntrada() {
+    setErr("");
+    const idItemNum = Number(movItemId);
+    const quantidadeNum = Number(movQuantidade);
+
+    if (!Number.isFinite(idItemNum) || idItemNum <= 0) {
+      setErr("Selecione um item válido");
+      return;
+    }
+
+    if (!Number.isFinite(quantidadeNum) || quantidadeNum <= 0) {
+      setErr("Informe uma quantidade válida (maior que zero)");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await apiPost<MovimentacaoResponse>("/movimentacoes", token, {
+        id_item: idItemNum,
+        tipo: "entrada",
+        quantidade: quantidadeNum,
+      });
+
+      await load();
+      setMovQuantidade("1");
+      setMovItemId("");
     } catch (e: any) {
       setErr(String(e?.message ?? e));
     } finally {
@@ -282,6 +315,37 @@ export function InventarioPage({ token }: { token: string }) {
           />
           <button onClick={cadastrarItem} disabled={busy}>
             {busy ? "Salvando..." : "Cadastrar Item"}
+          </button>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">Entrada de Estoque</h3>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, alignItems: "end" }}>
+          <select
+            value={movItemId}
+            onChange={(e) => setMovItemId(e.target.value)}
+            disabled={busy}
+          >
+            <option value="">Selecione um item</option>
+            {itens.map((it) => (
+              <option key={it.id_item} value={it.id_item}>
+                {it.nome} (#{it.id_item})
+              </option>
+            ))}
+          </select>
+          <input
+            placeholder="quantidade"
+            value={movQuantidade}
+            inputMode="numeric"
+            maxLength={3}
+            onChange={(e) => setMovQuantidade(e.target.value.replace(/\D/g, "").slice(0, 3))}
+            disabled={busy}
+          />
+          <button onClick={fazerEntrada} disabled={busy || !movItemId}>
+            {busy ? "Registrando..." : "Registrar Entrada"}
           </button>
         </div>
       </div>
@@ -354,17 +418,7 @@ export function InventarioPage({ token }: { token: string }) {
                   )}
                 </td>
                 <td>
-                  {editingId === it.id_item ? (
-                    <input
-                      value={editQuantidade}
-                      inputMode="numeric"
-                      maxLength={3}
-                      onChange={(e) => setEditQuantidade(e.target.value.replace(/\D/g, "").slice(0, 3))}
-                      placeholder="quantidade"
-                      style={{ width: 140 }}
-                      disabled={busy}
-                    />
-                  ) : it.quantidade != null ? (
+                  {it.quantidade != null ? (
                     it.quantidade
                   ) : (
                     "-"

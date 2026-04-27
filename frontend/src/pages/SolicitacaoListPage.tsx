@@ -69,14 +69,14 @@ export function SolicitacoesListPage({ token }: { token: string }) {
 
       {err && <p style={{ color: "crimson" }}>{err}</p>}
       {!data ? (
-        <p>Carregando…</p>
+        <div className="loading">Carregando solicitações...</div>
       ) : (
         <table style={{ width: "100%", marginTop: 12 }}>
           <thead>
             <tr>
               <th>ID</th>
               <th>Título</th>
-              <th>Setor</th>
+              <th>Setor / Cpf</th>
               <th>Estado</th>
               <th>Quando</th>
               <th>Ações</th>

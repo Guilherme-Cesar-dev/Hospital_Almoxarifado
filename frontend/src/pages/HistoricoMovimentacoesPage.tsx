@@ -32,7 +32,7 @@ export function HistoricoMovimentacoesPage({ token }: { token: string }) {
       result = result.filter((mov) => {
         const nome = (mov.nome_item ?? "").toLowerCase();
         const id = String(mov.id_item);
-        return nome === qq || id === qq;
+        return nome.includes(qq) || id === qq;
       });
     }
 

@@ -39,6 +39,7 @@ export type SolicitacaoDetalheResponse = {
       solicitante_user_id: string;
       quando: string;
       concluida_por: string | null;
+      concluida_por_nome: string | null;
       concluida_em: string | null;
       atendimento_resumo: unknown | null;
     };

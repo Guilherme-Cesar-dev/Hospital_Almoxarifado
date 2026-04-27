@@ -5,6 +5,7 @@ import type {
   AddItemBody,
   CreateSolicitacaoBody,
   CreateSolicitacaoResponse,
+  SolicitacaoDetalheResponse,
 } from "../types/solicitacoes";
 
 type ItemRow = {
@@ -18,6 +19,14 @@ type ItemRow = {
 
 type ItensResponse = { ok: true; data: ItemRow[] };
 
+type ItemAdicionado = {
+  id_solicitacao_item: number;
+  id_item: number;
+  nome: string;
+  quantidade: number;
+  observacao: string;
+};
+
 export function NovaSolicitacaoPage({ token }: { token: string }) {
   const nav = useNavigate();
 
@@ -27,6 +36,7 @@ export function NovaSolicitacaoPage({ token }: { token: string }) {
   const [err, setErr] = useState("");
 
   const [createdId, setCreatedId] = useState<number | null>(null);
+  const [itensAdicionados, setItensAdicionados] = useState<ItemAdicionado[]>([]);
 
   // itens disponíveis (pra não digitar id na mão)
   const [itens, setItens] = useState<ItemRow[]>([]);
@@ -34,8 +44,17 @@ export function NovaSolicitacaoPage({ token }: { token: string }) {
 
   // item form
   const [idItem, setIdItem] = useState(""); // continua string (value do select)
+  const [buscaItem, setBuscaItem] = useState("");
   const [qtd, setQtd] = useState("1");
   const [obs, setObs] = useState("");
+
+  const itensFiltrados = itens.filter((it) => {
+    const termo = buscaItem.trim().toLowerCase();
+    if (!termo) return true;
+    const nome = (it.nome ?? "").toLowerCase();
+    const id = String(it.id_item);
+    return nome.includes(termo) || id.includes(termo);
+  });
 
   useEffect(() => {
     setErr("");
@@ -52,6 +71,20 @@ export function NovaSolicitacaoPage({ token }: { token: string }) {
     const body: CreateSolicitacaoBody = { titulo, descricao, setor };
     const resp = await apiPost<CreateSolicitacaoResponse>("/solicitacoes", token, body);
     setCreatedId(resp.data.id_solicitacao);
+    setItensAdicionados([]);
+  }
+
+  async function carregarItensSolicitacao(idSolicitacao: number) {
+    const resp = await apiGet<SolicitacaoDetalheResponse>(`/solicitacoes/${idSolicitacao}`, token);
+    const itens = resp.data.itens.map((it) => ({
+      id_solicitacao_item: it.id_solicitacao_item,
+      id_item: it.id_item,
+      nome: it.item.nome ?? `ITEM #${it.id_item}`,
+      quantidade: it.quantidade,
+      observacao: it.observacao ?? "",
+    }));
+
+    setItensAdicionados(itens);
   }
 
   async function addItem() {
@@ -70,6 +103,8 @@ export function NovaSolicitacaoPage({ token }: { token: string }) {
     };
 
     await apiPost(`/solicitacoes/${createdId}/itens`, token, body);
+
+    await carregarItensSolicitacao(createdId);
 
     // limpa
     setIdItem("");
@@ -90,7 +125,7 @@ export function NovaSolicitacaoPage({ token }: { token: string }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <label>Título</label>
-              <input value={titulo} maxLength={15} onChange={(e) => setTitulo(e.target.value.slice(0, 15))} />
+              <input value={titulo} maxLength={60} onChange={(e) => setTitulo(e.target.value.slice(0, 60))} />
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <label>Setor / Cpf</label>
@@ -119,6 +154,14 @@ export function NovaSolicitacaoPage({ token }: { token: string }) {
               <h3 className="card-title">Adicionar Item</h3>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+              <input
+                placeholder="Buscar item por nome ou ID"
+                value={buscaItem}
+                maxLength={30}
+                onChange={(e) => setBuscaItem(e.target.value.slice(0, 30))}
+                style={{ gridColumn: "1 / -1" }}
+              />
+
               <select
                 value={idItem}
                 onChange={(e) => setIdItem(e.target.value)}
@@ -128,9 +171,9 @@ export function NovaSolicitacaoPage({ token }: { token: string }) {
                 <option value="">
                   {itensLoading ? "Carregando itens..." : "Selecione um item"}
                 </option>
-                {itens.map((it) => (
+                {itensFiltrados.map((it) => (
                   <option key={it.id_item} value={String(it.id_item)}>
-                    {(it.nome ?? `ITEM #${it.id_item}`) + ` (#{it.id_item})`}
+                    {`#${it.id_item} - ${it.nome ?? "ITEM sem nome"}`}
                   </option>
                 ))}
               </select>
@@ -159,6 +202,32 @@ export function NovaSolicitacaoPage({ token }: { token: string }) {
               <button onClick={() => nav(`/solicitacoes/${createdId}`)} style={{ gridColumn: "1 / -1" }}>
                 Ver detalhe
               </button>
+            </div>
+
+            <div style={{ marginTop: 20 }}>
+              <h3 style={{ marginBottom: 8 }}>Itens adicionados</h3>
+              {itensAdicionados.length === 0 ? (
+                <p style={{ color: "#666" }}>Nenhum item adicionado ainda.</p>
+              ) : (
+                <table style={{ width: "100%", marginTop: 8 }}>
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Quantidade</th>
+                      <th>Observação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {itensAdicionados.map((it) => (
+                      <tr key={it.id_solicitacao_item}>
+                        <td>{`#${it.id_item} - ${it.nome}`}</td>
+                        <td>{it.quantidade}</td>
+                        <td>{it.observacao || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </>
